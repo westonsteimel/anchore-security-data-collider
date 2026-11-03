@@ -2,6 +2,7 @@ from typing import TYPE_CHECKING
 
 import click
 
+from anchore_security_data_collider.identifiers.store import SecurityIdentifiersStore, SecurityIdentifiersStoreConfig
 from anchore_security_data_collider.providers.cve5.enriched.renderer import (
     Renderer,
     RendererConfig,
@@ -75,10 +76,18 @@ def transform_versions(  # noqa: PLR0913, PLR0917
         ),
     ).process(None, batch_size=batch_size)
 
-@group.command(name="render", help="Render the full CVE5 documents with an Anchore ADP section containing our enriched entries and calculated cpeApplicability statements")  # noqa: E501
+@group.command(
+    name="render",
+    help="Render the full CVE5 documents with an Anchore ADP section containing our enriched entries and calculated cpeApplicability statements",
+)
 @click.option("--repo-root", help="Path to the root of the collider enriched data git repo", required=True)
 @click.option("--control-repo-root", help="Path to the root of the control data git repo", required=True)
 @click.option("--snapshot-repo-root", help="Path to the root of the upstream snapshot data git repo", required=True)
+@click.option(
+    "--vuln-index-spec-files-repo-root",
+    help="Path to the root of the Anchore Vulnerability Index Spec Files git repo",
+    required=True,
+)
 @click.option("--results-dir", help="The directory in which to render results", required=True)
 @click.pass_obj
 def render(  # noqa: PLR0913, PLR0917
@@ -86,6 +95,7 @@ def render(  # noqa: PLR0913, PLR0917
     repo_root: str,
     control_repo_root: str,
     snapshot_repo_root: str,
+    vuln_index_spec_files_repo_root: str,
     results_dir: str,
 ) -> None:
     Renderer(
@@ -93,6 +103,11 @@ def render(  # noqa: PLR0913, PLR0917
             enriched_repo_root=repo_root,
             control_repo_root=control_repo_root,
             snapshot_repo_root=snapshot_repo_root,
+            vuln_index_spec_files_repo_root=vuln_index_spec_files_repo_root,
             results_directory=results_dir,
+        ),
+        security_identifiers=SecurityIdentifiersStore(
+            state_dir=cfg.state_dir,
+            config=SecurityIdentifiersStoreConfig(),
         ),
     ).render()

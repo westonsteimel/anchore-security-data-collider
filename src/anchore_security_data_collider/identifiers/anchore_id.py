@@ -1,3 +1,4 @@
+import os
 from dataclasses import dataclass
 from functools import total_ordering
 
@@ -22,6 +23,8 @@ class AnchoreId:  # noqa: PLW1641
     def __gt__(self, other):
         return ((self.year, self.index) > (other.year, other.index))
 
+    def filename(self, root: str, extension: str="toml") -> str:
+        return os.path.join(root, str(self.year), str(self.index // 1000), f"{self!s}.{extension}")
 
 class InvalidAnchoreIdError(ValueError):
     def __init__(self, identifier: str):
