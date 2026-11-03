@@ -6,14 +6,18 @@ from copy import deepcopy
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from glob import iglob
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
+from anchore_security_data_collider.deployment import DeploymentEnvironment
 from anchore_security_data_collider.providers.cve5.enriched.adp import ANCHORE_ADP
 from anchore_security_data_collider.providers.cve5.enriched.config import EnrichedDatasetConfig
 from anchore_security_data_collider.providers.cve5.enriched.cpe import construct_cpe_applicability_statement
 from anchore_security_data_collider.providers.cve5.identifier import CVEIdentifier, parse_identifier
 from anchore_security_data_collider.providers.cve5.models import CNAEnrichmentFragment
 from anchore_security_data_collider.utils import timer
+
+if TYPE_CHECKING:
+    from anchore_security_data_collider.identifiers.store import SecurityIdentifiersStore
 
 
 @dataclass(frozen=True, slots=True)
@@ -23,16 +27,22 @@ class RendererConfig(EnrichedDatasetConfig):
     results_directory: str
 
 class Renderer:
-    def __init__(self, config: RendererConfig):
+    def __init__(self, config: RendererConfig, security_identifiers: SecurityIdentifiersStore):
         self._logger = logging.getLogger("cve5-enriched-renderer")
         self._config = config
         self._enriched_data_path = os.path.join(self._config.enriched_repo_root, "data")
         self._control_data_path = os.path.join(self._config.control_repo_root, "data")
         self._snapshot_data_path = os.path.join(self._config.snapshot_repo_root, "data")
         self._results_data_path = os.path.join(self._config.results_directory, "data")
+        self._security_identifiers = security_identifiers
 
     def _ready(self) -> bool:
-        return os.path.exists(self._enriched_data_path) and os.path.exists(self._control_data_path) and os.path.exists(self._snapshot_data_path)
+        return (
+            os.path.exists(self._enriched_data_path)
+            and os.path.exists(self._control_data_path)
+            and os.path.exists(self._snapshot_data_path)
+            and self._security_identifiers.ready()
+        )
 
     def _fetch_enriched_fragment(self, identifier: CVEIdentifier) -> Any:
         path = identifier.filename(self._enriched_data_path, "json")
@@ -134,7 +144,22 @@ class Renderer:
         else:
             shutil.rmtree(self._results_data_path)
 
+    def _apply_unreconciled_spec_files(self, cve_id: str, rendered: Any) -> Any:
+        anchore_id = self._security_identifiers.lookup(cve_id)
+        if not anchore_id:
+            return rendered
+
+        # TODO: check if we have a spec file for the given id and whether or not it
+        # has been reconciled.  If it has not we need to render a new anchoreadp entry from
+        # the spec file that will replace any existing entry
+
+        return rendered
+
     def render(self):
+        # TODO: eventually move from using development env here, but currently this dataset is only published to dev
+        # Needs to be moved to the same S3 bucket as this rendered dataset.
+        self._security_identifiers.fetch(environment=DeploymentEnvironment.DEVELOPMENT)
+
         if not self._ready():
             raise ValueError("Input data is not ready")
 
@@ -144,6 +169,10 @@ class Renderer:
             for file in iglob(os.path.join(self._snapshot_data_path, "**/CVE-*.json"), recursive=True):
                 self._logger.trace(f"start rendering {file}")
                 parsed_cve_id, rendered = self._render_from_upstream_snapshot_file(file)
+                # TODO: Until all existing spec files have been imported to the new dataset, we must
+                # consider the existing anchore-vulnerability-index-spec-files and allow them to
+                # override this if not yet marked as reconciled to the cve5-enriched dataset
+                rendered = self._apply_unreconciled_spec_files(cve_id=str(parsed_cve_id), rendered=rendered)
                 output_path = parsed_cve_id.filename(self._results_data_path, "json")
                 os.makedirs(os.path.dirname(output_path), exist_ok=True)
                 with open(output_path, "w") as f:

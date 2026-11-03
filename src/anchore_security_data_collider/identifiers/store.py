@@ -26,7 +26,7 @@ class Extract:
 
 @dataclass
 class SecurityIdentifiersStoreConfig:
-    pull_format_string: str
+    pull_format_string: str = "ghcr.io/anchore/data/{environment}/security-identifiers/sqlite/v0:latest"
     extracts: list[Extract] | None = None
 
     def pull_string(self, env: DeploymentEnvironment) -> str:
@@ -45,7 +45,7 @@ class SecurityIdentifiersStore:
         self._name = "security-identifiers"
         self._config = config
         self._logger = logging.getLogger(self._name)
-        self._store_path = os.path.join(state_dir, "inputs", self._name, f"{self._name}.db")
+        self._store_path = os.path.join(state_dir, "store", self._name, f"{self._name}.db")
         self._thread_local_store = _StoreThreadLocal()
 
     @property

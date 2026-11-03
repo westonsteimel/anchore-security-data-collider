@@ -2,6 +2,7 @@ from typing import TYPE_CHECKING
 
 import click
 
+from anchore_security_data_collider.identifiers.store import SecurityIdentifiersStore, SecurityIdentifiersStoreConfig
 from anchore_security_data_collider.providers.cve5.enriched.renderer import (
     Renderer,
     RendererConfig,
@@ -94,5 +95,9 @@ def render(  # noqa: PLR0913, PLR0917
             control_repo_root=control_repo_root,
             snapshot_repo_root=snapshot_repo_root,
             results_directory=results_dir,
+        ),
+        security_identifiers=SecurityIdentifiersStore(
+            state_dir=cfg.state_dir,
+            config=SecurityIdentifiersStoreConfig(),
         ),
     ).render()
